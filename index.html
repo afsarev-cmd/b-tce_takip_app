@@ -2,24 +2,22 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <!-- Mobil Dikey Optimizasyonu için Viewport ayarı -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aylık Ödeme Takipçisi (Grafik ve Mobil Uyumlu)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aylık Ödeme Takipçisi</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- React ve ReactDOM -->
-    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
+    <!-- Babel (JSX'i tarayıcının anlaması için) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
-        body { 
-            font-family: 'Inter', sans-serif; 
-            -webkit-overflow-scrolling: touch; 
-        }
-        
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        /* Input oklarını gizle */
         input::-webkit-outer-spin-button,
         input::-webkit-inner-spin-button {
             -webkit-appearance: none;
@@ -28,50 +26,33 @@
         input[type=number] {
             -moz-appearance: textfield;
         }
-
-        @keyframes flash-dark {
-            0%, 100% { background-color: #450a0a; border-color: #7f1d1d; }
-            50% { background-color: #7f1d1d; border-color: #ef4444; }
+        /* Gecikmiş Ödeme Alarmı Animasyonu */
+        @keyframes flash {
+            0%, 100% { background-color: #fef2f2; border-color: #fca5a5; }
+            50% { background-color: #fecaca; border-color: #ef4444; }
         }
         .animate-flash {
-            animation: flash-dark 1.5s infinite alternate;
+            animation: flash 1.5s infinite alternate;
         }
-
-        /* Inputlar daha büyük ve dokunmatik dostu */
-        input[type="date"], select {
-            color-scheme: dark;
-            background-color: #1e293b; 
-            min-height: 52px; 
-            font-size: 1.125rem; 
+        /* Tarih input stili */
+        input[type="date"] {
+            position: relative;
+            cursor: pointer;
         }
         input[type="date"]::-webkit-calendar-picker-indicator {
             cursor: pointer;
-            filter: invert(1);
-            opacity: 0.7;
-            transform: scale(1.3); 
-            padding: 5px;
-        }
-        
-        button:active {
-            transform: scale(0.98);
-        }
-
-        /* Ana içerik konteynerini dikey mobil görünüme odakla */
-        .main-container {
-            max-width: 1400px; /* Daha geniş ekranlar için artırıldı */
-            margin: 0 auto;
         }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 pb-10">
+<body class="bg-slate-50">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
-        // --- İKONLAR (Boyutlar dokunmatik için ayarlandı) ---
-        const IconBase = ({ children, className, style, onClick }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style} onClick={onClick}>{children}</svg>
+        // --- İKONLAR ---
+        const IconBase = ({ children, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
         );
         const Wallet = (props) => <IconBase {...props}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></IconBase>;
         const TrendingDown = (props) => <IconBase {...props}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></IconBase>;
@@ -95,12 +76,8 @@
         const Search = (props) => <IconBase {...props}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></IconBase>;
         const Save = (props) => <IconBase {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconBase>;
         const X = (props) => <IconBase {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>;
-        const BarChart3 = (props) => <IconBase {...props}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></IconBase>;
-        const TrendingUp = (props) => <IconBase {...props}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></IconBase>;
-
 
         const SABIT_FATURALAR = [
-            'Ev Kirası',
             'Elektrik Faturası',
             'Su Faturası',
             'Doğalgaz Faturası',
@@ -109,161 +86,24 @@
             'Aidat'
         ];
 
+        // Tarihi YYYY-MM-DD formatına çeviren yardımcı fonksiyon
         const formatDate = (date) => {
             const d = new Date(date);
             let month = '' + (d.getMonth() + 1);
             let day = '' + d.getDate();
             const year = d.getFullYear();
+
             if (month.length < 2) month = '0' + month;
             if (day.length < 2) day = '0' + day;
+
             return [year, month, day].join('-');
         }
         
+        // Seçili ayın son gününü YYYY-MM-DD formatında döndürür
         const getDefaultDueDate = (date) => {
             const d = new Date(date.getFullYear(), date.getMonth() + 1, 0);
             return formatDate(d);
         }
-
-        // --- GRAFİK BİLEŞENİ (Inline SVG) ---
-        const GiderGrafikModal = ({ baslik, historicalData, formatPara, onClose }) => {
-            const data = historicalData.filter(d => d.amount > 0).sort((a, b) => (a.date > b.date ? 1 : -1));
-
-            if (data.length < 2) {
-                return (
-                    <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                        <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-indigo-700/50 w-full max-w-lg">
-                            <div className="flex justify-between items-start mb-6">
-                                <h3 className="text-xl font-bold text-slate-100">{baslik} - Geçmiş Analizi</h3>
-                                <button onClick={onClose} className="p-2 text-slate-400 hover:text-rose-400 rounded-full transition active:scale-90"><X className="w-6 h-6" /></button>
-                            </div>
-                            <div className="text-center py-10">
-                                <BarChart3 className="w-16 h-16 text-indigo-500 mx-auto mb-4" />
-                                <p className="text-slate-400">Grafiği göstermek için en az 2 farklı ayda girilmiş ödeme tutarı gereklidir.</p>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            const SVG_WIDTH = 450;
-            const SVG_HEIGHT = 200;
-            const PADDING = 35; // Boşluk arttırıldı
-            const CHART_WIDTH = SVG_WIDTH - 2 * PADDING;
-            const CHART_HEIGHT = SVG_HEIGHT - 2 * PADDING;
-
-            const amounts = data.map(d => d.amount);
-            const maxAmount = Math.max(...amounts);
-            const minAmount = Math.min(...amounts);
-            
-            const yMin = (minAmount < maxAmount / 10) ? 0 : minAmount * 0.95;
-            const yRange = maxAmount - yMin;
-
-            const getX = (index) => PADDING + (index / (data.length - 1)) * CHART_WIDTH;
-            const getY = (amount) => PADDING + CHART_HEIGHT - ((amount - yMin) / yRange) * CHART_HEIGHT;
-
-            const pathData = data.map((d, i) => {
-                const x = getX(i);
-                const y = getY(d.amount);
-                return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-            }).join(' ');
-            
-            const yAxisLabels = [maxAmount, (maxAmount + yMin) / 2, yMin].map(val => Math.round(val));
-            
-            const lastAmount = data[data.length - 1].amount;
-            const prevAmount = data.length > 1 ? data[data.length - 2].amount : 0;
-            const change = lastAmount - prevAmount;
-            const changePercent = prevAmount > 0 ? (change / prevAmount) * 100 : 0;
-            const trendColor = change > 0 ? 'text-rose-400' : (change < 0 ? 'text-emerald-400' : 'text-slate-400');
-            const trendIcon = change > 0 ? <TrendingUp className="w-5 h-5" /> : (change < 0 ? <TrendingDown className="w-5 h-5" /> : <Clock className="w-5 h-5" />);
-
-            return (
-                <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-                    <div className="bg-slate-800 p-6 sm:p-8 rounded-2xl shadow-2xl border border-indigo-700/50 w-full max-w-lg">
-                        <div className="flex justify-between items-start mb-6">
-                            <h3 className="text-2xl font-bold text-slate-100">{baslik}</h3>
-                            <button onClick={onClose} className="p-3 text-slate-400 hover:text-rose-400 rounded-full transition active:scale-90"><X className="w-7 h-7" /></button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 mb-6 text-center">
-                            <div className="bg-slate-700 p-3 rounded-xl border border-slate-600">
-                                <p className="text-sm text-slate-400">Son Ödeme Tutarınız</p>
-                                <p className="text-xl font-bold text-indigo-400">{formatPara(lastAmount)}</p>
-                            </div>
-                            <div className={`bg-slate-700 p-3 rounded-xl border ${change > 0 ? 'border-rose-700' : (change < 0 ? 'border-emerald-700' : 'border-slate-600')}`}>
-                                <p className="text-sm text-slate-400">Değişim (Önceki Aya Göre)</p>
-                                <p className={`text-xl font-bold flex items-center justify-center gap-1 ${trendColor}`}>
-                                    {trendIcon} {formatPara(Math.abs(change))} 
-                                    {change !== 0 && <span className="text-sm font-normal">({changePercent.toFixed(1)}%)</span>}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 overflow-x-auto">
-                            <svg width="100%" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} className="max-w-full h-auto">
-                                
-                                {/* Y Eksen Çizgisi ve Etiketler */}
-                                <line x1={PADDING} y1={PADDING} x2={PADDING} y2={SVG_HEIGHT - PADDING} stroke="#475569" strokeWidth="1" />
-                                {yAxisLabels.map((val, index) => (
-                                    <g key={index}>
-                                        <line 
-                                            x1={PADDING} 
-                                            y1={getY(val)} 
-                                            x2={SVG_WIDTH - PADDING} 
-                                            stroke="#475569" 
-                                            strokeDasharray="2 2"
-                                            strokeWidth="0.5"
-                                        />
-                                        <text x={PADDING - 5} y={getY(val) + 5} textAnchor="end" fontSize="10" fill="#94a3b8">
-                                            {formatPara(val).replace('₺', '').replace(/\s/g, '').replace(',00', '')}
-                                        </text>
-                                    </g>
-                                ))}
-
-                                {/* X Eksen Çizgisi */}
-                                <line x1={PADDING} y1={SVG_HEIGHT - PADDING} x2={SVG_WIDTH - PADDING} stroke="#475569" strokeWidth="1" />
-
-                                {/* Çizgi Grafiği */}
-                                <path 
-                                    d={pathData} 
-                                    fill="none" 
-                                    stroke="#818CF8" 
-                                    strokeWidth="3" 
-                                    strokeLinejoin="round" 
-                                    strokeLinecap="round" 
-                                />
-
-                                {/* Noktalar */}
-                                {data.map((d, i) => (
-                                    <g key={i}>
-                                        <circle 
-                                            cx={getX(i)} 
-                                            cy={getY(d.amount)} 
-                                            r="4" 
-                                            fill="#818CF8" 
-                                            stroke="#1e293b" 
-                                            strokeWidth="2"
-                                            title={`${d.label}: ${formatPara(d.amount)}`}
-                                        />
-                                        {/* X Eksen Etiketleri */}
-                                        <text 
-                                            x={getX(i)} 
-                                            y={SVG_HEIGHT - PADDING + 15} 
-                                            textAnchor="middle" 
-                                            fontSize="10" 
-                                            fill="#94a3b8"
-                                        >
-                                            {d.label}
-                                        </text>
-                                    </g>
-                                ))}
-                            </svg>
-                        </div>
-                        <p className="text-center text-sm text-slate-500 mt-4">Tutar (TL) vs Ay/Yıl</p>
-                    </div>
-                </div>
-            );
-        };
-
 
         // Gider Satırı Bileşeni
         const GiderSatiri = ({ 
@@ -280,83 +120,82 @@
             getKategoriRenk,
             isOverdue,
             isDueSoon,
-            dateKeyLabel,
-            openChartModal 
+            dateKeyLabel
         }) => {
-            // Tarih formatı biraz daha kısa ve sade
-            const formattedDate = gider.sonOdemeTarihi ? new Date(gider.sonOdemeTarihi).toLocaleDateString('tr-TR') : 'YOK';
+            const formattedDate = gider.sonOdemeTarihi ? new Date(gider.sonOdemeTarihi).toLocaleDateString('tr-TR') : 'Belirtilmedi';
 
-            let rowClass = 'bg-slate-900 border-slate-800';
-            let dateBadgeClass = 'bg-slate-800 text-slate-400 border-slate-700';
+            let rowClass = 'bg-white border-slate-100';
+            let dateBadgeClass = 'bg-slate-100 text-slate-500 border-slate-200';
             let flashIndicator = null;
             
+            // Ödendi veya Gecikme durumları (Sadece düzenleme modunda değilken göster)
             const isEditing = editingId === gider.id;
 
             if (!isEditing) {
                 if (gider.odendimi) {
-                    rowClass = 'bg-emerald-900/20 border-emerald-800 opacity-60';
+                    rowClass = 'bg-emerald-50/50 border-emerald-100 opacity-75';
                 } else if (isOverdue) {
-                    rowClass = 'border-rose-800 animate-flash';
-                    dateBadgeClass = 'bg-rose-900 text-rose-100 border-rose-700';
-                    flashIndicator = <Zap className="w-4 h-4 text-rose-500 animate-pulse flex-shrink-0" />;
+                    rowClass = 'border-rose-300 animate-flash';
+                    dateBadgeClass = 'bg-rose-500 text-white border-rose-600';
+                    flashIndicator = <Zap className="w-4 h-4 text-rose-600 animate-pulse flex-shrink-0" />;
                 } else if (isDueSoon) {
-                    rowClass = 'bg-yellow-900/20 border-yellow-700 border-l-4 border-l-yellow-500';
-                    dateBadgeClass = 'bg-yellow-900 text-yellow-200 border-yellow-700';
+                    rowClass = 'bg-yellow-50/50 border-yellow-200 border-l-4 border-l-yellow-400';
+                    dateBadgeClass = 'bg-yellow-100 text-yellow-700 border-yellow-300';
                 }
             } else {
-                rowClass = 'bg-slate-800 border-indigo-500 ring-2 ring-indigo-500/50';
+                rowClass = 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-100'; // Düzenleme modu stili
             }
 
             return (
-                <div className={`flex flex-col sm:flex-row items-center justify-between p-4 sm:p-5 mb-3 rounded-2xl border transition-all shadow-md ${rowClass}`}>
-                    <div className="flex items-start gap-4 w-full sm:w-auto mb-4 sm:mb-0 flex-grow">
-                        {/* DURUM DEĞİŞTİRME BUTONU - BÜYÜTÜLDÜ */}
+                <div className={`flex flex-col sm:flex-row items-center justify-between p-4 rounded-xl border transition ${rowClass}`}>
+                    <div className="flex items-center gap-4 w-full sm:w-auto mb-3 sm:mb-0 flex-grow">
+                        {/* Sol Taraf: Durum İkonu veya Kategori */}
                         <button 
                             onClick={() => !isEditing && durumDegistir(gider.id)} 
-                            className={`flex-shrink-0 transition-colors p-2 -ml-2 ${gider.odendimi ? 'text-emerald-500' : 'text-slate-500 hover:text-indigo-400'} ${isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`flex-shrink-0 transition-colors ${gider.odendimi ? 'text-emerald-500' : 'text-slate-300 hover:text-indigo-500'} ${isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                             disabled={isEditing}
                         >
-                            {gider.odendimi ? <CheckCircle className="w-8 h-8" /> : <Circle className="w-8 h-8" />}
+                            {gider.odendimi ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
                         </button>
                         
-                        <div className="flex-grow min-w-0">
+                        <div className="flex-grow">
                             {isEditing ? (
-                                <div className="flex flex-col gap-3 w-full"> {/* Gap 3: Daha fazla dikey boşluk */}
+                                /* --- DÜZENLEME MODU (İSİM & TARİH) --- */
+                                <div className="flex flex-col gap-2 w-full">
                                     <input 
                                         type="text" 
                                         value={editForm.baslik} 
                                         onChange={(e) => setEditForm({...editForm, baslik: e.target.value})}
-                                        className="font-semibold text-slate-100 w-full p-3 rounded-lg bg-slate-700 border border-slate-600 focus:border-indigo-500 focus:outline-none text-base sm:text-lg"
+                                        className="font-semibold text-slate-800 w-full p-1 border-b border-indigo-300 bg-transparent focus:outline-none"
                                         placeholder="Ödeme İsmi"
                                     />
-                                    <input 
-                                        type="date" 
-                                        value={editForm.sonOdemeTarihi} 
-                                        onChange={(e) => setEditForm({...editForm, sonOdemeTarihi: e.target.value})}
-                                        className="flex-grow text-sm p-3 rounded-lg bg-slate-700 text-slate-200 border border-slate-600 focus:border-indigo-500 focus:outline-none"
-                                    />
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="date" 
+                                            value={editForm.sonOdemeTarihi} 
+                                            onChange={(e) => setEditForm({...editForm, sonOdemeTarihi: e.target.value})}
+                                            className="text-xs p-1 border rounded bg-white border-indigo-200 focus:outline-none"
+                                        />
+                                    </div>
                                 </div>
                             ) : (
+                                /* --- GÖRÜNTÜLEME MODU (İSİM & TARİH) --- */
                                 <>
-                                    <h3 className={`font-bold text-lg sm:text-xl ${gider.odendimi ? 'line-through text-slate-500' : 'text-slate-100'}`}>{gider.baslik}</h3>
-                                    <div className="flex flex-wrap items-center gap-3 mt-2"> {/* Gap 3: Daha fazla yatay boşluk */}
+                                    <h3 className={`font-semibold text-slate-800 ${gider.odendimi ? 'line-through text-slate-500' : ''}`}>{gider.baslik}</h3>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
                                         {dateKeyLabel && (
-                                            <span className="text-xs px-2 py-1 rounded-xl bg-slate-800 text-slate-400 border-slate-700 border font-medium flex items-center gap-1">
+                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 border-slate-300 border font-semibold flex items-center gap-1">
                                                 <Calendar className="w-3 h-3" /> {dateKeyLabel}
                                             </span>
                                         )}
-                                        <span className={`text-xs px-2 py-1 rounded-xl border font-medium ${getKategoriRenk(gider.kategori)}`}>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${getKategoriRenk(gider.kategori)}`}>
                                             {gider.kategori}
                                             {gider.kategori === 'Kredi' && gider.altKategori && ` (${gider.altKategori})`}
                                         </span>
-                                        {/* OKUNAKLILIK İÇİN YENİ TARİH GÖSTERİMİ */}
-                                        <span className={`flex items-center gap-1 px-3 py-1 rounded-xl border font-medium shadow-md ${dateBadgeClass}`}>
+                                        <span className={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${dateBadgeClass}`}>
                                             {flashIndicator}
-                                            <Clock className="w-4 h-4" /> {/* İkon boyutu artırıldı */}
-                                            <span className="text-xs font-medium mr-1">
-                                                {isOverdue ? 'GECİKTİ:' : (isDueSoon ? 'YAKINDA:' : 'VADE:')}
-                                            </span>
-                                            <span className="text-sm font-semibold">{formattedDate}</span> {/* Tarih puntoları artırıldı */}
+                                            <Clock className="w-3 h-3" />
+                                            {isOverdue ? 'GECİKTİ: ' : (isDueSoon ? 'YAKINDA: ' : 'Son Ödeme: ')} {formattedDate}
                                         </span>
                                     </div>
                                 </>
@@ -364,9 +203,11 @@
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between w-full sm:w-auto sm:gap-4 mt-3 sm:mt-0 pl-10 sm:pl-0">
+                    {/* Sağ Taraf: Tutar ve Aksiyon Butonları */}
+                    <div className="flex items-center justify-between w-full sm:w-auto sm:gap-4 mt-2 sm:mt-0">
                         {isEditing ? (
-                            <div className="flex items-center gap-2 w-full">
+                            /* --- DÜZENLEME MODU (TUTAR) --- */
+                            <div className="flex items-center gap-2">
                                 <input 
                                     type="text" 
                                     inputMode="decimal"
@@ -378,32 +219,31 @@
                                             saveEdit();
                                         }
                                     }}
-                                    className="w-full p-3 rounded-lg bg-slate-700 border border-slate-600 text-right font-bold text-xl text-indigo-400 focus:border-indigo-500 focus:outline-none"
+                                    className="w-24 p-1 border-b-2 border-indigo-500 outline-none text-right font-bold text-lg text-indigo-600 bg-transparent"
                                     placeholder="0"
                                 />
                             </div>
                         ) : (
-                            <span className={`font-bold text-xl sm:text-2xl min-w-[100px] text-right ${gider.odendimi ? 'line-through text-slate-500' : 'text-indigo-400'}`}>{formatPara(gider.tutar)}</span>
+                            /* --- GÖRÜNTÜLEME MODU (TUTAR) --- */
+                            <span className={`font-bold text-lg ${gider.odendimi ? 'text-slate-400' : 'text-slate-700'}`}>{formatPara(gider.tutar)}</span>
                         )}
                         
-                        <div className="flex items-center gap-2 ml-4">
-                            {!isEditing && !gider.odendimi && (
-                                <button 
-                                    onClick={() => openChartModal(gider.baslik)}
-                                    className="p-3 rounded-xl transition border border-transparent text-slate-400 bg-slate-800 hover:text-indigo-400 hover:border-indigo-500/30"
-                                    title="Grafiği Gör"
-                                >
-                                    <BarChart3 className="w-6 h-6" />
-                                </button>
-                            )}
-
+                        <div className="flex items-center gap-1 ml-2">
                             {isEditing ? (
                                 <>
-                                    <button onClick={saveEdit} className="p-3 rounded-xl text-emerald-400 bg-emerald-900/20 hover:bg-emerald-900/40 transition border border-emerald-800" title="Kaydet">
-                                        <Save className="w-6 h-6" />
+                                    <button 
+                                        onClick={saveEdit}
+                                        className="p-2 rounded-full text-green-600 hover:bg-green-100 transition"
+                                        title="Kaydet"
+                                    >
+                                        <Save className="w-5 h-5" />
                                     </button>
-                                    <button onClick={cancelEdit} className="p-3 rounded-xl text-rose-400 bg-rose-900/20 hover:bg-rose-900/40 transition border border-rose-800" title="İptal">
-                                        <X className="w-6 h-6" />
+                                    <button 
+                                        onClick={cancelEdit}
+                                        className="p-2 rounded-full text-rose-500 hover:bg-rose-100 transition"
+                                        title="İptal"
+                                    >
+                                        <X className="w-5 h-5" />
                                     </button>
                                 </>
                             ) : (
@@ -411,14 +251,12 @@
                                     <button 
                                         onClick={() => !gider.odendimi && startEditing(gider)} 
                                         disabled={gider.odendimi}
-                                        className={`p-3 rounded-xl transition border border-transparent ${gider.odendimi ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 bg-slate-800 hover:text-indigo-400 hover:border-indigo-500/30'}`}
+                                        className={`p-2 rounded-full transition ${gider.odendimi ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
                                         title="Düzenle"
                                     >
-                                        <Edit3 className="w-6 h-6" />
+                                        <Edit3 className="w-5 h-5" />
                                     </button>
-                                    <button onClick={() => giderSil(gider.id, gider.dateKey || getDateKey(new Date()))} className="p-3 rounded-xl text-slate-500 bg-slate-800 hover:text-rose-500 hover:bg-rose-900/20 hover:border-rose-800 border border-transparent transition" title="Sil">
-                                        <Trash2 className="w-6 h-6" />
-                                    </button>
+                                    <button onClick={() => giderSil(gider.id)} className="text-slate-300 hover:text-rose-500 p-2 hover:bg-rose-50 rounded-full transition" title="Sil"><Trash2 className="w-5 h-5" /></button>
                                 </>
                             )}
                         </div>
@@ -427,7 +265,6 @@
             );
         };
 
-        // --- ANA UYGULAMA ---
         const ButceTakip = () => {
             const [seciliTarih, setSeciliTarih] = useState(new Date());
             const [tumVeriler, setTumVeriler] = useState(() => {
@@ -436,12 +273,15 @@
                 return {};
             });
 
+            // editingId: { id: number, dateKey: string } olarak tutuyoruz
             const [editingId, setEditingId] = useState(null); 
+            // editForm: Tüm düzenlenebilir alanları tutar
             const [editForm, setEditForm] = useState({ baslik: '', tutar: '', sonOdemeTarihi: '' });
-            const [isFaturalarOpen, setIsFaturalarOpen] = useState(true); 
-            const [searchTerm, setSearchTerm] = useState(''); 
-            const [selectedItemForChart, setSelectedItemForChart] = useState(null); 
             
+            const [isFaturalarOpen, setIsFaturalarOpen] = useState(false);
+            const [searchTerm, setSearchTerm] = useState(''); 
+            const editInputRef = useRef(null);
+
             const initialDueDate = getDefaultDueDate(new Date());
 
             const [yeniGider, setYeniGider] = useState({
@@ -456,6 +296,7 @@
 
             const getDateKey = (date) => date.toISOString().slice(0, 7);
 
+            // GECİKMİŞ/YAKINDA VADE KONTROLÜ İÇİN YARDIMCI FONKSİYONLAR
             const getDayDiff = useCallback((dateString) => {
                 if (!dateString) return Infinity;
                 const today = new Date();
@@ -477,26 +318,7 @@
                 return diffDays >= 0 && diffDays <= 3;
             }, [checkOverdue, getDayDiff]);
 
-            // Geçmiş data toplama fonksiyonu
-            const getHistoricalData = useCallback((baslik) => {
-                const history = [];
-                const keys = Object.keys(tumVeriler).sort(); // Ay/Yıl bazında sırala
-                
-                keys.forEach(dateKey => {
-                    const monthData = tumVeriler[dateKey];
-                    const gider = monthData?.giderler?.find(g => g.baslik.includes(baslik) && !g.baslik.includes('(')); // Taksitli ödemeleri hariç tutmak için basit kontrol
-                    if (gider) {
-                        const dateLabel = new Date(dateKey + '-01').toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' });
-                        history.push({
-                            date: dateKey,
-                            label: dateLabel,
-                            amount: gider.tutar
-                        });
-                    }
-                });
-                return history;
-            }, [tumVeriler]);
-
+            // Seçili ay değiştiğinde yeni eklenen öğenin varsayılan tarihini güncelle
             useEffect(() => {
                 setYeniGider(prev => ({ 
                     ...prev, 
@@ -504,17 +326,16 @@
                 }));
             }, [seciliTarih]);
 
+            // Mevcut ay için veri yoksa, sabit faturaları yükle
             useEffect(() => {
-                // Her yeni ay seçildiğinde, o ayın sabit faturalarını kontrol et ve ekle
                 const key = getDateKey(seciliTarih);
                 setTumVeriler(prev => {
                     if (prev[key]) return prev;
-
                     const sabitler = SABIT_FATURALAR.map((baslik, index) => ({
                         id: Date.now() + index + Math.random(),
                         baslik: baslik,
                         tutar: 0,
-                        kategori: baslik.includes('Kira') ? 'Kira' : (baslik.includes('Aidat') ? 'Aidat' : 'Fatura'),
+                        kategori: baslik === 'Aidat' ? 'Aidat' : 'Fatura',
                         altKategori: null,
                         odendimi: false,
                         sonOdemeTarihi: getDefaultDueDate(seciliTarih)
@@ -523,9 +344,11 @@
                 });
             }, [seciliTarih]);
 
+            // Veri kaydetme
             useEffect(() => {
                 localStorage.setItem('butce_takip_v4', JSON.stringify(tumVeriler));
             }, [tumVeriler]);
+
 
             const getCurrentMonthData = () => {
                 const key = getDateKey(seciliTarih);
@@ -535,6 +358,7 @@
             const currentData = getCurrentMonthData();
             const { giderler } = currentData;
 
+            // --- GLOBAL ARAMA MANTIĞI VE FİLTRELEME ---
             const getFlattenedGiderler = useCallback((data) => {
                 const flattened = [];
                 Object.entries(data).forEach(([dateKey, monthData]) => {
@@ -548,23 +372,27 @@
             }, []);
 
             const allGiderler = useMemo(() => getFlattenedGiderler(tumVeriler), [tumVeriler, getFlattenedGiderler]);
+
             const isGlobalSearchActive = searchTerm.length > 0;
 
             const globalFilteredGiderler = useMemo(() => {
                 if (!isGlobalSearchActive) return [];
                 const term = searchTerm.toLowerCase();
+
                 return allGiderler.filter(gider => (
                     gider.baslik.toLowerCase().includes(term) ||
                     gider.kategori.toLowerCase().includes(term) ||
                     (gider.altKategori && gider.altKategori.toLowerCase().includes(term))
-                )).sort((a, b) => new Date(a.dateKey + '-01') - new Date(b.dateKey + '-01'));
+                )).sort((a, b) => {
+                    return new Date(a.dateKey + '-01') - new Date(b.dateKey + '-01');
+                });
             }, [isGlobalSearchActive, searchTerm, allGiderler]);
 
             const currentMonthItems = useMemo(() => {
                 if (isGlobalSearchActive) return { faturaKalemleri: [], digerKalemler: [] };
+                
                 const currentGiderler = currentData.giderler;
                 return {
-                    // Kira ve Aidat'ı da sabit kabul et
                     faturaKalemleri: currentGiderler.filter(g => SABIT_FATURALAR.includes(g.baslik)),
                     digerKalemler: currentGiderler.filter(g => !SABIT_FATURALAR.includes(g.baslik)),
                 };
@@ -572,6 +400,7 @@
 
             const { faturaKalemleri, digerKalemler } = currentMonthItems;
             
+            // --- GÜNCELLEME FONKSİYONLARI ---
             const updateItemInTumVeriler = useCallback((id, dateKey, updates) => {
                 setTumVeriler(prev => {
                     const newVeriler = { ...prev };
@@ -592,7 +421,6 @@
                     }
                     return newVeriler;
                 });
-                setEditingId(null);
             }, []);
 
             const durumDegistir = useCallback((id, dateKey) => {
@@ -601,9 +429,11 @@
                 updateItemInTumVeriler(id, dateKey, { odendimi: !currentGider.odendimi });
             }, [tumVeriler, updateItemInTumVeriler]);
 
+            // --- DÜZENLEME İŞLEMLERİ ---
             const startEditing = (gider) => {
                 const dateKey = gider.dateKey || getDateKey(seciliTarih);
                 setEditingId({ id: gider.id, dateKey: dateKey });
+                // Düzenleme formunu doldur
                 setEditForm({
                     baslik: gider.baslik,
                     tutar: gider.tutar === 0 ? '' : gider.tutar.toString(),
@@ -621,6 +451,7 @@
                     const cleanValue = editForm.tutar.toString().replace(',', '.');
                     const yeniTutar = parseFloat(cleanValue) || 0;
                     const { id, dateKey } = editingId;
+                    
                     const itemExists = tumVeriler[dateKey]?.giderler?.some(item => item.id === id);
                     if (itemExists) {
                          updateItemInTumVeriler(id, dateKey, { 
@@ -633,6 +464,7 @@
                 }
             };
 
+            // --- İstatistikler (Mevcut Aya Ait) ---
             const prevMonthInfo = useMemo(() => {
                 const prevDate = new Date(seciliTarih);
                 prevDate.setMonth(seciliTarih.getMonth() - 1);
@@ -663,7 +495,7 @@
                 e.preventDefault();
                 if (!yeniGider.baslik || !yeniGider.tutar) return;
 
-                const isTaksit = yeniGider.taksitli && parseInt(yeniGider.taksitSayisi) > 1;
+                const isTaksit = yeniGider.taksitli && yeniGider.taksitSayisi > 1;
                 const donguSayisi = isTaksit ? parseInt(yeniGider.taksitSayisi) : 1;
                 const girilenTutar = parseFloat(yeniGider.tutar);
                 const baseDate = new Date(yeniGider.sonOdemeTarihi);
@@ -678,12 +510,11 @@
                         taksitSonOdemeTarihi.setMonth(baseDate.getMonth() + i);
                         
                         if (!yeniVeriler[key]) {
-                            // Yeni ay geldiğinde sabit faturaları ekle (yalnızca boşsa)
                             const sabitler = SABIT_FATURALAR.map((baslik, idx) => ({
                                 id: Date.now() + idx + Math.random(),
                                 baslik: baslik,
                                 tutar: 0,
-                                kategori: baslik.includes('Kira') ? 'Kira' : (baslik.includes('Aidat') ? 'Aidat' : 'Fatura'),
+                                kategori: baslik === 'Aidat' ? 'Aidat' : 'Fatura',
                                 altKategori: null,
                                 odendimi: false,
                                 sonOdemeTarihi: getDefaultDueDate(hedefTarih)
@@ -691,17 +522,6 @@
                             yeniVeriler[key] = { giderler: sabitler };
                         }
                         
-                        // Sabit faturaları tekrar eklememek için kontrol
-                        let isDuplicate = false;
-                        if (!isTaksit) {
-                            isDuplicate = yeniVeriler[key].giderler.some(g => g.baslik === yeniGider.baslik);
-                        }
-                        
-                        if (isDuplicate) {
-                            console.warn(`${yeniGider.baslik} bu ayda zaten mevcut. Atlanıyor.`);
-                            continue;
-                        }
-
                         const baslikMetni = isTaksit ? `${yeniGider.baslik} (${i + 1}/${donguSayisi})` : yeniGider.baslik;
                         const yeniKayit = {
                             id: Date.now() + i + Math.random(),
@@ -723,8 +543,6 @@
                     tutar: '', 
                     taksitli: false, 
                     taksitSayisi: 1, 
-                    kategori: 'Fatura',
-                    altKategori: 'İhtiyaç',
                     sonOdemeTarihi: getDefaultDueDate(seciliTarih) 
                 });
             };
@@ -734,29 +552,19 @@
             
             const getKategoriRenk = (kat) => {
                 switch(kat) {
-                    case 'Kredi': return 'bg-purple-900/30 text-purple-300 border-purple-700';
-                    case 'Fatura': return 'bg-blue-900/30 text-blue-300 border-blue-700';
-                    case 'Kira': return 'bg-orange-900/30 text-orange-300 border-orange-700';
-                    case 'Kredi Kartı': return 'bg-pink-900/30 text-pink-300 border-pink-700';
-                    case 'Aidat': return 'bg-yellow-900/30 text-yellow-300 border-yellow-700';
-                    default: return 'bg-gray-800 text-gray-300 border-gray-600';
+                    case 'Kredi': return 'bg-purple-100 text-purple-600 border-purple-200';
+                    case 'Fatura': return 'bg-blue-100 text-blue-600 border-blue-200';
+                    case 'Kira': return 'bg-orange-100 text-orange-600 border-orange-200';
+                    case 'Kredi Kartı': return 'bg-pink-100 text-pink-600 border-pink-200';
+                    case 'Aidat': return 'bg-yellow-100 text-yellow-600 border-yellow-200';
+                    default: return 'bg-gray-100 text-gray-600 border-gray-200';
                 }
             };
-            
-            // Grafik modalını aç
-            const openChartModal = (baslik) => {
-                // Taksitli bir ödeme ise, parantez içindeki kısmı keserek ana başlığı al
-                const cleanBaslik = baslik.split(' (')[0];
-                setSelectedItemForChart(cleanBaslik);
-            };
 
-            const historicalData = selectedItemForChart ? getHistoricalData(selectedItemForChart) : [];
-
-            // CSV export fonksiyonu (değişmedi)
             const exportToCsv = () => {
                 const allRecords = allGiderler;
                 if (allRecords.length === 0) {
-                    console.log('Dışa aktarılacak veri bulunamadı.');
+                    alert('Dışa aktarılacak veri bulunamadı.');
                     return;
                 }
                 const headers = ['Ay_Yil', 'Baslik', 'Tutar', 'Kategori', 'Alt_Kategori', 'Son_Odeme_Tarihi', 'Durum'];
@@ -798,104 +606,90 @@
             };
 
             return (
-                <div className="min-h-screen bg-slate-950 p-4 sm:p-6 lg:p-8 font-sans text-slate-200 overflow-x-hidden">
-                    <div className="main-container space-y-10"> {/* Genel boşluklar artırıldı */}
-                        {/* GRAFİK MODALI */}
-                        {selectedItemForChart && (
-                            <GiderGrafikModal 
-                                baslik={selectedItemForChart} 
-                                historicalData={historicalData} 
-                                formatPara={formatPara}
-                                onClose={() => setSelectedItemForChart(null)}
-                            />
-                        )}
-
-                        <header className="bg-slate-900 p-5 rounded-2xl shadow-xl border border-slate-800 flex flex-col items-center justify-between gap-4 sticky top-0 z-20">
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-900/50"><Wallet className="w-8 h-8 text-white" /></div>
-                                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">Ödeme Takipçisi</h1>
+                <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-800">
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        <header className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                                <div className="p-2 bg-indigo-600 rounded-lg"><Wallet className="text-white w-6 h-6" /></div>
+                                <h1 className="text-xl font-bold text-slate-800">Ödeme Takipçisi</h1>
                             </div>
                             
-                            <div className="flex items-center bg-slate-800 rounded-xl p-1.5 border border-slate-700 shadow-inner w-full justify-between">
-                                <button onClick={() => ayDegistir(-1)} className="p-3 sm:p-4 hover:bg-slate-700 rounded-lg transition text-slate-400 active:scale-95" disabled={isGlobalSearchActive}><ChevronLeft className="w-6 h-6" /></button>
-                                <div className="px-3 font-bold text-lg text-slate-300 min-w-[160px] text-center flex items-center justify-center gap-3">
-                                    <Calendar className="w-5 h-5 text-indigo-400" />
+                            <div className="flex items-center bg-slate-100 rounded-lg p-1">
+                                <button onClick={() => ayDegistir(-1)} className="p-2 hover:bg-white rounded-md transition text-slate-600" disabled={isGlobalSearchActive}><ChevronLeft className="w-5 h-5" /></button>
+                                <div className="px-4 font-semibold text-slate-700 min-w-[140px] text-center flex items-center justify-center gap-2">
+                                    <Calendar className="w-4 h-4 text-indigo-500" />
                                     {isGlobalSearchActive ? 'Global Arama' : formatTarihYaziyla(seciliTarih)}
                                 </div>
-                                <button onClick={() => ayDegistir(1)} className="p-3 sm:p-4 hover:bg-slate-700 rounded-lg transition text-slate-400 active:scale-95" disabled={isGlobalSearchActive}><ChevronRight className="w-6 h-6" /></button>
+                                <button onClick={() => ayDegistir(1)} className="p-2 hover:bg-white rounded-md transition text-slate-600" disabled={isGlobalSearchActive}><ChevronRight className="w-5 h-5" /></button>
                             </div>
                         </header>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* Ödeme Bilgileri Kartları */}
-                            <div className={`bg-slate-900 p-5 rounded-2xl shadow-xl flex flex-col gap-2 border-l-8 border-l-rose-600 ${gecikenSayisi > 0 ? 'border-2 border-rose-600 shadow-rose-900/30' : 'border border-slate-800'} md:col-span-1`}>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className={`bg-white p-4 rounded-xl shadow-sm flex flex-col gap-1 border-l-4 border-l-rose-500 ${gecikenSayisi > 0 ? 'border-2 border-rose-500 shadow-lg shadow-rose-200' : 'border border-slate-100'}`}>
                                 <div className="flex justify-between items-start">
-                                    <span className="text-sm font-bold text-slate-400 uppercase tracking-wider">Kalan Borç (Bu Ay)</span>
-                                    {gecikenSayisi > 0 && <Zap className="w-6 h-6 text-rose-500 animate-pulse" title="Gecikmiş Ödeme Var" />}
-                                    <TrendingDown className="w-6 h-6 text-rose-500 hidden sm:block" />
+                                    <span className="text-xs text-slate-500 font-bold uppercase">Kalan Borç (Bu Ay)</span>
+                                    {gecikenSayisi > 0 && <Zap className="w-5 h-5 text-rose-500 animate-pulse" title="Gecikmiş Ödeme Var" />}
+                                    <TrendingDown className="w-4 h-4 text-rose-500 hidden sm:block" />
                                 </div>
-                                <span className="text-3xl sm:text-4xl font-black text-rose-500 tracking-tight">{formatPara(kalanBorc)}</span>
-                                <div className="text-sm text-slate-500 mt-1">
+                                <span className="text-2xl font-bold text-rose-600">{formatPara(kalanBorc)}</span>
+                                <div className="text-xs text-slate-400 mt-1">
                                     Ödenmesi gereken tutar
-                                    {gecikenSayisi > 0 && <span className="text-rose-400 font-bold block mt-1 bg-rose-900/30 p-1 rounded text-center">({gecikenSayisi} Gecikmiş)</span>}
-                                    {yakindaSayisi > 0 && <span className="text-yellow-500 font-bold block mt-1 bg-yellow-900/20 p-1 rounded text-center">({yakindaSayisi} Yakında Vade)</span>}
+                                    {gecikenSayisi > 0 && <span className="text-rose-500 font-semibold block mt-0.5">{gecikenSayisi} Gecikmiş Ödeme!</span>}
+                                    {yakindaSayisi > 0 && <span className="text-yellow-600 font-semibold block mt-0.5">{yakindaSayisi} Yakında Vadesi Geliyor!</span>}
                                 </div>
                             </div>
-                            <div className="bg-slate-900 p-5 rounded-2xl shadow-xl border border-slate-800 flex flex-col gap-2 border-l-8 border-l-emerald-500 md:col-span-1">
-                                <div className="flex justify-between items-start"><span className="text-sm font-bold text-slate-400 uppercase tracking-wider">Ödenen Tutar (Bu Ay)</span><CheckCircle2 className="w-6 h-6 text-emerald-500" /></div>
-                                <span className="text-3xl sm:text-4xl font-black text-emerald-500 tracking-tight">{formatPara(odenenTutar)}</span>
-                                <div className="text-sm text-slate-500 mt-1">Bu ay yapılan ödemeler</div>
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-1 border-l-4 border-l-emerald-500">
+                                <div className="flex justify-between items-start"><span className="text-xs text-slate-500 font-bold uppercase">Ödenen Tutar (Bu Ay)</span><CheckCircle2 className="w-4 h-4 text-emerald-500" /></div>
+                                <span className="text-2xl font-bold text-emerald-700">{formatPara(odenenTutar)}</span>
+                                <div className="text-xs text-slate-400 mt-1">Bu ay yapılan ödemeler</div>
                             </div>
-                            <div className="bg-slate-900 p-5 rounded-2xl shadow-xl border border-slate-800 flex flex-col gap-2 relative overflow-hidden md:col-span-1">
-                                <div className="absolute -right-6 -top-6 opacity-10"><History className="w-32 h-32 text-indigo-600" /></div>
+                            <div className="bg-indigo-50 p-4 rounded-xl shadow-sm border border-indigo-100 flex flex-col gap-1 relative overflow-hidden">
+                                <div className="absolute -right-4 -top-4 opacity-10"><History className="w-24 h-24 text-indigo-600" /></div>
                                 <div className="flex justify-between items-start relative z-10">
-                                    <span className="text-sm font-bold text-indigo-400 uppercase tracking-wider">Geçen Ay ({prevMonthInfo.label})</span>
+                                    <span className="text-xs text-indigo-600 font-bold uppercase">Geçen Ay ({prevMonthInfo.label})</span>
                                 </div>
                                 {prevMonthInfo.data ? (
-                                    <div className="relative z-10 mt-2 space-y-1">
-                                        <div className="flex justify-between text-base">
-                                            <span className="text-indigo-300">Ödenen:</span>
-                                            <span className="font-bold text-indigo-400">{formatPara(prevMonthInfo.totalOdenen)}</span>
+                                    <div className="relative z-10 mt-1">
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="text-indigo-400">Ödenen:</span>
+                                            <span className="font-bold text-indigo-700">{formatPara(prevMonthInfo.totalOdenen)}</span>
                                         </div>
-                                        <div className="flex justify-between text-base">
-                                            <span className="text-indigo-300">Ödenmeyen:</span>
-                                            <span className="font-bold text-rose-400">{formatPara(prevKalanBorc)}</span>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-indigo-400">Ödenmeyen:</span>
+                                            <span className="font-bold text-rose-500">{formatPara(prevKalanBorc)}</span>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="text-sm text-indigo-400/50 mt-2 relative z-10 italic">Kayıt bulunamadı.</div>
+                                    <div className="text-sm text-indigo-400 mt-2 relative z-10 italic">Kayıt bulunamadı.</div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Ana Izgara Yapısı 5 Sütuna Çıkarıldı (Form: 2, Liste: 3) */}
-                        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                            
-                            {/* FORM ALANI - Genişletildi: lg:col-span-2 */}
-                            <div className="lg:col-span-2"> 
-                                <form onSubmit={giderEkle} className="bg-slate-900 p-6 rounded-2xl shadow-xl border border-slate-800 sticky top-24 z-10">
-                                    <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-100 border-b border-slate-800 pb-4"><Plus className="w-6 h-6 text-indigo-500" /> Ödeme Ekle</h2>
-                                    <div className="space-y-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-1">
+                                <form onSubmit={giderEkle} className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 sticky top-6">
+                                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-700"><Plus className="w-5 h-5" /> Ödeme Ekle</h2>
+                                    <div className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-semibold text-slate-400 mb-2 ml-1">Açıklama / İsim</label>
-                                            <input type="text" placeholder="Örn: Ev Kirası" value={yeniGider.baslik} onChange={(e) => setYeniGider({...yeniGider, baslik: e.target.value})} className="w-full p-4 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-200 placeholder-slate-600 text-lg transition-all" />
+                                            <label className="block text-xs font-medium text-slate-500 mb-1">Açıklama / İsim</label>
+                                            <input type="text" placeholder="Örn: Ev Kirası" value={yeniGider.baslik} onChange={(e) => setYeniGider({...yeniGider, baslik: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500" />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-semibold text-slate-400 mb-2 ml-1">Tutar (TL)</label>
-                                            <input type="number" placeholder="0.00" value={yeniGider.tutar} onChange={(e) => setYeniGider({...yeniGider, tutar: e.target.value})} className="w-full p-4 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-200 placeholder-slate-600 text-lg font-mono transition-all" />
+                                            <label className="block text-xs font-medium text-slate-500 mb-1">Tutar (TL)</label>
+                                            <input type="number" placeholder="0.00" value={yeniGider.tutar} onChange={(e) => setYeniGider({...yeniGider, tutar: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500" />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-semibold text-slate-400 mb-2 ml-1">Son Ödeme Tarihi</label>
+                                            <label className="block text-xs font-medium text-slate-500 mb-1">Son Ödeme Tarihi (Takvimden Seçin)</label>
                                             <input 
                                                 type="date" 
                                                 value={yeniGider.sonOdemeTarihi} 
                                                 onChange={(e) => setYeniGider({...yeniGider, sonOdemeTarihi: e.target.value})} 
-                                                className="w-full p-4 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-200 text-lg transition-all" 
+                                                className="w-full p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500" 
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-semibold text-slate-400 mb-2 ml-1">Kategori</label>
-                                            <select value={yeniGider.kategori} onChange={(e) => setYeniGider({...yeniGider, kategori: e.target.value})} className="w-full p-4 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-200 text-lg appearance-none transition-all">
+                                            <label className="block text-xs font-medium text-slate-500 mb-1">Kategori</label>
+                                            <select value={yeniGider.kategori} onChange={(e) => setYeniGider({...yeniGider, kategori: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg bg-white">
                                                 <option value="Kredi">Kredi</option>
                                                 <option value="Fatura">Fatura</option>
                                                 <option value="Kira">Kira</option>
@@ -905,9 +699,9 @@
                                             </select>
                                         </div>
                                         {yeniGider.kategori === 'Kredi' && (
-                                            <div className="bg-purple-900/20 p-4 rounded-xl border border-purple-800/50 animate-fade-in">
-                                                <label className="block text-sm font-semibold text-purple-300 mb-2 ml-1">Kredi Türü</label>
-                                                <select value={yeniGider.altKategori} onChange={(e) => setYeniGider({...yeniGider, altKategori: e.target.value})} className="w-full p-3 bg-slate-800 border border-purple-700 rounded-lg text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500/40 text-base">
+                                            <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 animate-fade-in">
+                                                <label className="block text-xs font-medium text-purple-700 mb-1">Kredi Türü</label>
+                                                <select value={yeniGider.altKategori} onChange={(e) => setYeniGider({...yeniGider, altKategori: e.target.value})} className="w-full p-2 border border-purple-200 rounded bg-white text-sm text-purple-800">
                                                     <option value="İhtiyaç">İhtiyaç Kredisi</option>
                                                     <option value="Konut">Konut Kredisi</option>
                                                     <option value="Taşıt">Taşıt Kredisi</option>
@@ -915,142 +709,155 @@
                                             </div>
                                         )}
                                         <div className="pt-2">
-                                            <label className="flex items-center gap-3 p-4 border border-slate-700 rounded-xl cursor-pointer hover:bg-slate-800 transition active:bg-slate-700"><input type="checkbox" checked={yeniGider.taksitli} onChange={(e) => setYeniGider({...yeniGider, taksitli: e.target.checked})} className="w-6 h-6 text-indigo-500 rounded bg-slate-700 border-slate-600 focus:ring-offset-slate-900 focus:ring-2" /><span className="text-base font-medium text-slate-300">Taksitli İşlem</span></label>
+                                            <label className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-slate-50"><input type="checkbox" checked={yeniGider.taksitli} onChange={(e) => setYeniGider({...yeniGider, taksitli: e.target.checked})} className="w-4 h-4 text-indigo-600" /><span className="text-xs font-medium text-slate-600">Taksitli İşlem</span></label>
                                             {yeniGider.taksitli && (
-                                                <div className="bg-indigo-900/20 p-4 rounded-xl border border-indigo-800/50 mt-3 animate-fade-in">
-                                                    <label className="block text-sm font-semibold text-indigo-300 mb-2 flex items-center gap-2 ml-1"><RefreshCw className="w-4 h-4" /> Taksit Sayısı</label>
-                                                    <input type="number" min="2" max="120" value={yeniGider.taksitSayisi} onChange={(e) => setYeniGider({...yeniGider, taksitSayisi: e.target.value})} className="w-full p-3 bg-slate-800 border border-indigo-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-lg font-mono" />
+                                                <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 mt-2">
+                                                    <label className="block text-xs font-medium text-indigo-700 mb-1 flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Taksit Sayısı</label>
+                                                    <input type="number" min="2" max="120" value={yeniGider.taksitSayisi} onChange={(e) => setYeniGider({...yeniGider, taksitSayisi: e.target.value})} className="w-full p-2 border border-indigo-200 rounded" />
                                                 </div>
                                             )}
                                         </div>
-                                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 px-6 rounded-xl transition transform active:scale-95 flex justify-center items-center gap-3 shadow-lg shadow-indigo-900/40 text-lg mt-4"><Plus className="w-6 h-6" /> Listeye Ekle</button>
+                                        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition flex justify-center items-center gap-2"><Plus className="w-4 h-4" /> Ödeme Ekle</button>
                                     </div>
                                 </form>
                             </div>
 
-                            {/* LİSTE ALANI - Oranı ayarlandı: lg:col-span-3 */}
-                            <div className="lg:col-span-3 space-y-8">
+                            <div className="lg:col-span-2 space-y-4">
                                 
-                                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-lg">
-                                    <div className="relative w-full sm:max-w-md">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                    <div className="relative w-full sm:max-w-xs">
                                         <input 
                                             type="text" 
-                                            placeholder="Tüm Aylarda Ara..." 
+                                            placeholder="Tüm Aylarda Ödeme Ara (Başlık, Kategori...)" 
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
-                                            className="w-full p-4 pl-12 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-200 placeholder-slate-500 text-lg transition-all"
+                                            className="w-full p-2 pl-10 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
                                         />
-                                        <Search className="w-6 h-6 text-slate-500 absolute left-4 top-1/2 transform -translate-y-1/2" />
+                                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                                     </div>
                                     <button 
                                         onClick={exportToCsv} 
-                                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 px-6 rounded-xl transition transform active:scale-95 flex items-center justify-center gap-3 text-base w-full sm:w-auto shadow-lg shadow-emerald-900/20"
+                                        className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-4 rounded-lg transition flex items-center gap-2 text-sm w-full sm:w-auto"
                                     >
-                                        <Download className="w-5 h-5" /> 
-                                        CSV İndir
+                                        <Download className="w-4 h-4" /> 
+                                        Tümünü Dışa Aktar (CSV)
                                     </button>
                                 </div>
 
+                                {/* LİSTE GÖRÜNÜMÜ */}
+
                                 {isGlobalSearchActive ? (
                                     <>
-                                        <div className="flex justify-between items-end border-b border-slate-800 pb-4 pt-2">
-                                            <h2 className="text-xl font-bold text-slate-300">Arama Sonuçları</h2>
-                                            <span className="text-sm font-medium text-slate-500 bg-slate-900 px-3 py-1 rounded-full">{globalFilteredGiderler.length} sonuç</span>
+                                        <div className="flex justify-between items-end border-b border-slate-200 pb-2 pt-2">
+                                            <h2 className="text-lg font-semibold text-slate-700">Arama Sonuçları (Tüm Aylar)</h2>
+                                            <span className="text-sm text-slate-500">{globalFilteredGiderler.length} sonuç</span>
                                         </div>
-                                        <div className="space-y-4">
-                                            {globalFilteredGiderler.map((gider) => (
-                                                <GiderSatiri
-                                                    key={gider.id + gider.dateKey} 
-                                                    gider={gider} 
-                                                    editingId={editingId?.id}
-                                                    editForm={editForm}
-                                                    setEditForm={setEditForm}
-                                                    saveEdit={saveEdit}
-                                                    cancelEdit={cancelEdit}
-                                                    startEditing={startEditing}
-                                                    durumDegistir={(id) => durumDegistir(id, gider.dateKey)}
-                                                    giderSil={(id, dateKey) => giderSil(id, gider.dateKey)}
-                                                    formatPara={formatPara}
-                                                    getKategoriRenk={getKategoriRenk}
-                                                    isOverdue={checkOverdue(gider)}
-                                                    isDueSoon={checkDueSoon(gider)}
-                                                    dateKeyLabel={new Date(gider.dateKey + '-01').toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })}
-                                                    openChartModal={openChartModal}
-                                                />
-                                            ))}
-                                        </div>
-                                        {globalFilteredGiderler.length === 0 && (
-                                            <div className="text-center py-16 bg-slate-900 rounded-2xl border-2 border-dashed border-slate-800">
-                                                <Search className="w-16 h-16 text-slate-700 mx-auto mb-4" />
-                                                <p className="text-slate-500 text-lg">Aradığınız kriterlere uygun kayıt bulunamadı.</p>
+                                        {globalFilteredGiderler.length === 0 ? (
+                                            <div className="text-center py-10 bg-white rounded-xl border border-dashed border-slate-300">
+                                                <p className="text-slate-400">Aradığınız kriterlere uygun kayıt tüm aylarda bulunamadı.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {globalFilteredGiderler.map((gider) => (
+                                                    <GiderSatiri
+                                                        // Key'i benzersiz yapmak için id ve dateKey'i birleştiriyoruz
+                                                        key={gider.id + gider.dateKey} 
+                                                        gider={gider} 
+                                                        // Düzenleme ID'si
+                                                        editingId={editingId?.id}
+                                                        editForm={editForm}
+                                                        setEditForm={setEditForm}
+                                                        saveEdit={saveEdit}
+                                                        cancelEdit={cancelEdit}
+                                                        startEditing={startEditing}
+                                                        // İşlem yaparken, hangi aya ait olduğunu belirten dateKey'i gönderiyoruz
+                                                        durumDegistir={(id) => durumDegistir(id, gider.dateKey)}
+                                                        giderSil={(id) => giderSil(id, gider.dateKey)}
+                                                        editInputRef={editInputRef}
+                                                        formatPara={formatPara}
+                                                        getKategoriRenk={getKategoriRenk}
+                                                        isOverdue={checkOverdue(gider)}
+                                                        isDueSoon={checkDueSoon(gider)}
+                                                        dateKeyLabel={new Date(gider.dateKey + '-01').toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })}
+                                                    />
+                                                ))}
                                             </div>
                                         )}
                                     </>
                                 ) : (
                                     <>
-                                        <div className="flex justify-between items-end border-b border-slate-800 pb-4 pt-2">
-                                            <h2 className="text-xl font-bold text-slate-300">Ödeme Listesi</h2>
-                                            <span className="text-sm font-medium text-slate-500 bg-slate-900 px-3 py-1 rounded-full">{giderler.length} kalem</span>
+                                        <div className="flex justify-between items-end border-b border-slate-200 pb-2 pt-2">
+                                            <h2 className="text-lg font-semibold text-slate-700">Ödeme Listesi (Mevcut Ay)</h2>
+                                            <span className="text-sm text-slate-500">{giderler.length} kalem</span>
                                         </div>
                                         
-                                        <div className="space-y-4">
-                                            {digerKalemler.map((gider) => (
-                                                <GiderSatiri 
-                                                    key={gider.id} 
-                                                    gider={gider} 
-                                                    editingId={editingId?.id}
-                                                    editForm={editForm}
-                                                    setEditForm={setEditForm}
-                                                    saveEdit={saveEdit}
-                                                    cancelEdit={cancelEdit}
-                                                    startEditing={startEditing}
-                                                    durumDegistir={(id) => durumDegistir(id, getDateKey(seciliTarih))}
-                                                    giderSil={(id) => giderSil(id, getDateKey(seciliTarih))}
-                                                    formatPara={formatPara}
-                                                    getKategoriRenk={getKategoriRenk}
-                                                    isOverdue={checkOverdue(gider)}
-                                                    isDueSoon={checkDueSoon(gider)}
-                                                    openChartModal={openChartModal}
-                                                />
-                                            ))}
-
-                                            <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900 mt-6 shadow-lg">
-                                                <button onClick={() => setIsFaturalarOpen(!isFaturalarOpen)} className="w-full flex items-center justify-between p-5 bg-slate-800 hover:bg-slate-750 transition active:bg-slate-700">
-                                                    <div className="flex items-center gap-3 text-slate-300 font-bold text-lg">
-                                                        <Receipt className="w-6 h-6 text-indigo-400" />
-                                                        <span>Sabit Ödemeler (Kira, Fatura, Aidat)</span>
-                                                        <span className="text-sm font-normal text-slate-500 ml-2 bg-slate-900 px-2 py-0.5 rounded-md">({faturaKalemleri.length})</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-4">
-                                                        <span className="font-bold text-slate-400 text-lg">{formatPara(faturaKalemleri.reduce((acc, val) => acc + val.tutar, 0))}</span>
-                                                        {isFaturalarOpen ? <ChevronUp className="w-6 h-6 text-slate-500" /> : <ChevronDown className="w-6 h-6 text-slate-500" />}
-                                                    </div>
-                                                </button>
-                                                {isFaturalarOpen && (
-                                                    <div className="p-4 space-y-3 bg-slate-900/50 border-t border-slate-800">
-                                                        {faturaKalemleri.map((gider) => (
-                                                            <GiderSatiri 
-                                                                key={gider.id} 
-                                                                gider={gider} 
-                                                                editingId={editingId?.id}
-                                                                editForm={editForm}
-                                                                setEditForm={setEditForm}
-                                                                saveEdit={saveEdit}
-                                                                cancelEdit={cancelEdit}
-                                                                startEditing={startEditing}
-                                                                durumDegistir={(id) => durumDegistir(id, getDateKey(seciliTarih))}
-                                                                giderSil={(id) => giderSil(id, getDateKey(seciliTarih))}
-                                                                formatPara={formatPara}
-                                                                getKategoriRenk={getKategoriRenk}
-                                                                isOverdue={checkOverdue(gider)}
-                                                                isDueSoon={checkDueSoon(gider)}
-                                                                openChartModal={openChartModal}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                )}
+                                        {giderler.length === 0 ? (
+                                            <div className="text-center py-10 bg-white rounded-xl border border-dashed border-slate-300">
+                                                <p className="text-slate-400">Bu aya ait kayıt bulunamadı.</p>
                                             </div>
-                                        </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {/* DİĞER KALEMLER */}
+                                                {digerKalemler.map((gider) => (
+                                                    <GiderSatiri 
+                                                        key={gider.id} 
+                                                        gider={gider} 
+                                                        editingId={editingId?.id}
+                                                        editForm={editForm}
+                                                        setEditForm={setEditForm}
+                                                        saveEdit={saveEdit}
+                                                        cancelEdit={cancelEdit}
+                                                        startEditing={startEditing}
+                                                        // İşlem yaparken mevcut ayın dateKey'ini gönderiyoruz
+                                                        durumDegistir={(id) => durumDegistir(id, getDateKey(seciliTarih))}
+                                                        giderSil={(id) => giderSil(id, getDateKey(seciliTarih))}
+                                                        editInputRef={editInputRef}
+                                                        formatPara={formatPara}
+                                                        getKategoriRenk={getKategoriRenk}
+                                                        isOverdue={checkOverdue(gider)}
+                                                        isDueSoon={checkDueSoon(gider)}
+                                                    />
+                                                ))}
+
+                                                {/* SABİT FATURALAR (KAPANIR LİSTE) */}
+                                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white mt-4">
+                                                    <button onClick={() => setIsFaturalarOpen(!isFaturalarOpen)} className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition">
+                                                        <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                                                            <Receipt className="w-5 h-5 text-indigo-500" />
+                                                            <span>Sabit Faturalar</span>
+                                                            <span className="text-xs font-normal text-slate-500 ml-2">({faturaKalemleri.length} kalem)</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="font-bold text-slate-600">{formatPara(faturaKalemleri.reduce((acc, val) => acc + val.tutar, 0))}</span>
+                                                            {isFaturalarOpen ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                                                        </div>
+                                                    </button>
+                                                    {isFaturalarOpen && (
+                                                        <div className="p-3 space-y-2 bg-slate-50/50 border-t border-slate-200">
+                                                            {faturaKalemleri.map((gider) => (
+                                                                <GiderSatiri 
+                                                                    key={gider.id} 
+                                                                    gider={gider} 
+                                                                    editingId={editingId?.id}
+                                                                    editForm={editForm}
+                                                                    setEditForm={setEditForm}
+                                                                    saveEdit={saveEdit}
+                                                                    cancelEdit={cancelEdit}
+                                                                    startEditing={startEditing}
+                                                                    durumDegistir={(id) => durumDegistir(id, getDateKey(seciliTarih))}
+                                                                    giderSil={(id) => giderSil(id, getDateKey(seciliTarih))}
+                                                                    editInputRef={editInputRef}
+                                                                    formatPara={formatPara}
+                                                                    getKategoriRenk={getKategoriRenk}
+                                                                    isOverdue={checkOverdue(gider)}
+                                                                    isDueSoon={checkDueSoon(gider)}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </>
                                 )}
                             </div>
